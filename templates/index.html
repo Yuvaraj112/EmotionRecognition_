@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mood Mapping Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f4f7fa;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 1200px;
+            margin: auto;
+        }
+        .card {
+            background: #fff;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            margin-top: 0;
+            font-size: 18px;
+            color: #444;
+            margin-bottom: 15px;
+        }
+        img {
+            width: 100%;
+            border-radius: 12px;
+            border: 3px solid #ddd;
+        }
+        canvas {
+            width: 100% !important;
+            height: 350px !important;
+        }
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 14px;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <h1>📊 AI-Powered Mood Mapping Dashboard</h1>
+
+    <div class="container">
+        <!-- Webcam Feed -->
+        <div class="card">
+            <h2>🎥 Live Webcam Feed</h2>
+            <img src="{{ url_for('video_feed') }}" />
+        </div>
+
+        <!-- Bar Chart -->
+        <div class="card">
+            <h2>📈 Emotion Distribution</h2>
+            <canvas id="moodChart"></canvas>
+        </div>
+
+        <!-- Timeline Chart -->
+        <div class="card" style="grid-column: span 2;">
+            <h2>📉 Mood Timeline (All Emotions)</h2>
+            <canvas id="timelineChart"></canvas>
+        </div>
+    </div>
+
+    <footer>
+        Built with ❤️ using Flask, TensorFlow & Chart.js
+    </footer>
+
+    <script>
+        // --- Stream bootstrap and health ---
+        // (No additional JS needed for the simple <img src="/video_feed"> stream)
+
+        // --- Bar Chart ---
+        var ctx = document.getElementById('moodChart').getContext('2d');
+        var chart = new Chart(ctx, {
+            type: 'bar',
+            data: { 
+                labels: [], 
+                datasets: [{ 
+                    label: 'Emotion Count', 
+                    data: [], 
+                    backgroundColor: [
+                        '#e74c3c', // angry - red
+                        '#8e44ad', // disgust - purple
+                        '#f39c12', // fear - orange
+                        '#27ae60', // happy - green
+                        '#95a5a6', // neutral - gray
+                        '#3498db', // sad - blue
+                        '#e67e22'  // surprise - dark orange
+                    ],
+                    borderColor: '#2c3e50',
+                    borderWidth: 2,
+                    borderRadius: 8,
+                    borderSkipped: false
+                }] 
+            },
+            options: { 
+                responsive: true, 
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        borderColor: '#2c3e50',
+                        borderWidth: 1,
+                        cornerRadius: 8
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#666',
+                            font: { size: 12 }
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: '#666',
+                            font: { size: 12, weight: 'bold' }
+                        }
+                    }
+                },
+                animation: {
+                    duration: 1000,
+                    easing: 'easeInOutQuart'
+                }
+            }
+        });
+
+        function updateChart() {
+            fetch('/mood_data')
+                .then(response => response.json())
+                .then(data => {
+                    chart.data.labels = Object.keys(data);
+                    chart.data.datasets[0].data = Object.values(data);
+                    chart.update();
+                });
+        }
+        setInterval(updateChart, 2000);
+
+        // --- Multi-Emotion Timeline ---
+        var emotionLabels = ['angry','disgust','fear','happy','neutral','sad','surprise'];
+        var colors = ['#e74a3b','#1cc88a','#6f42c1','#36b9cc','#858796','#f6c23e','#fd7e14'];
+
+        var timelineCtx = document.getElementById('timelineChart').getContext('2d');
+        var datasets = emotionLabels.map((emo, i) => ({
+            label: emo,
+            data: [],
+            borderColor: colors[i],
+            fill: false,
+            tension: 0.2
+        }));
+
+        var timelineChart = new Chart(timelineCtx, {
+            type: 'line',
+            data: { labels: [], datasets: datasets },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { x: { ticks: { maxRotation: 45, minRotation: 45 } } }
+            }
+        });
+
+        function updateTimeline() {
+            fetch('/mood_data')
+                .then(response => response.json())
+                .then(data => {
+                    let now = new Date().toLocaleTimeString();
+                    timelineChart.data.labels.push(now);
+
+                    emotionLabels.forEach((emo, i) => {
+                        timelineChart.data.datasets[i].data.push(data[emo] || 0);
+                    });
+
+                    if (timelineChart.data.labels.length > 20) {
+                        timelineChart.data.labels.shift();
+                        timelineChart.data.datasets.forEach(ds => ds.data.shift());
+                    }
+
+                    timelineChart.update();
+                });
+        }
+        setInterval(updateTimeline, 2000);
+    </script>
+</body>
+</html>
